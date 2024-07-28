@@ -1,0 +1,171 @@
+---
+- name: Automated Deployment and Configuration with Ansible
+  hosts: hng
+  become: yes
+  vars:
+    pg_password_file: /var/secrets/pg_pw.txt
+    pg_user: postgres
+    pg_password: securepassword
+    pg_database: postgres
+    pg_host: localhost
+    app_port: 3000
+    app_dir: /opt/stage_5b
+    log_dir: /var/log/stage_5b
+
+  tasks:
+    - name: Ensure hng user exists
+      user:
+        name: hng
+        state: present
+        groups: sudo
+
+    - name: Create necessary directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: hng
+        mode: '0755'
+      loop:
+        - /var/secrets
+        - "{{ log_dir }}"
+
+    - name: Save PostgreSQL admin credentials
+      copy:
+        dest: "{{ pg_password_file }}"
+        content: "PG_USER={{ pg_user }}\nPG_PASSWORD={{ pg_password }}\nPG_DATABASE={{ pg_database }}\n"
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Read PostgreSQL credentials
+      slurp:
+        src: "{{ pg_password_file }}"
+      register: pg_creds
+
+    - name: Set PostgreSQL credentials as variables
+      set_fact:
+        pg_user: "{{ (pg_creds.content | b64decode).split('\n')[0].split('=')[1] }}"
+        pg_password: "{{ (pg_creds.content | b64decode).split('\n')[1].split('=')[1] }}"
+        pg_database: "{{ (pg_creds.content | b64decode).split('\n')[2].split('=')[1] }}"
+
+    - name: Update and upgrade apt packages
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    - name: Install necessary packages
+      apt:
+        name:
+          - git
+          - postgresql
+          - nginx
+          - rabbitmq-server
+          - golang
+        state: present
+
+    - name: Check if repository already exists
+      stat:
+        path: "{{ app_dir }}/.git"
+      register: repo_exists
+
+    - name: Clone the boilerplate repository
+      git:
+        repo: https://github.com/hngprojects/hng_boilerplate_golang_web.git
+        dest: "{{ app_dir }}"
+        version: devops
+      become: yes
+      become_user: hng
+      when: not repo_exists.stat.exists
+
+    - name: Create application configuration file
+      copy:
+        dest: "{{ app_dir }}/config.yaml"
+        content: |
+          database:
+            host: "127.0.0.1"
+            port: "5432"
+            username: "{{ pg_user }}"
+            password: "{{ pg_password }}"
+            name: "{{ pg_database }}"
+        owner: hng
+        group: hng
+        mode: '0600'
+
+    - name: Set environment variables
+      lineinfile:
+        path: /etc/environment
+        line: "{{ item }}"
+        create: yes
+      loop:
+        - 'DATABASE_URL=postgres://{{ pg_user }}:{{ pg_password }}@127.0.0.1:5432/{{ pg_database }}'
+      notify: Reload Environment
+
+    - name: Install application dependencies
+      shell: |
+        cd {{ app_dir }}
+        go mod tidy
+      args:
+        chdir: "{{ app_dir }}"
+      become: yes
+      become_user: hng
+
+    - name: Ensure application runs on port 3000
+      shell: |
+        cd {{ app_dir }}
+        nohup go run main.go > {{ log_dir }}/out.log 2> {{ log_dir }}/error.log &
+      args:
+        chdir: "{{ app_dir }}"
+      become: yes
+      become_user: hng
+
+    - name: Configure Nginx
+      copy:
+        dest: /etc/nginx/sites-available/default
+        content: |
+          server {
+              listen 80;
+              server_name _;
+              location / {
+                  proxy_pass http://127.0.0.1:{{ app_port }};
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+              }
+          }
+      notify:
+        - Reload Nginx
+
+    - name: Ensure log files are owned by hng user
+      file:
+        path: "{{ item }}"
+        owner: hng
+        group: hng
+        state: touch
+        mode: '0644'
+      loop:
+        - "{{ log_dir }}/error.log"
+        - "{{ log_dir }}/out.log"
+
+    - name: Ensure services are running
+      service:
+        name: "{{ item }}"
+        state: started
+      loop:
+        - postgresql
+        - nginx
+        - rabbitmq-server
+
+  handlers:
+    - name: Reload Nginx
+      service:
+        name: nginx
+        state: reloaded
+
+    - name: Reload Environment
+      shell: |
+        if [ -f /etc/environment ]; then
+          . /etc/environment
+        fi
+      args:
+        executable: /bin/bash
