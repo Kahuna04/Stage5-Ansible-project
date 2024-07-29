@@ -1,14 +1,13 @@
-```
-## Automated Deployment and Configuration with Ansible for Boilerplates
+# Automated Deployment and Configuration with Ansible for Boilerplates
 
 This project automates the deployment and configuration of a boilerplate application using Ansible. It covers cloning the DevOps branch, installing dependencies, configuring PostgreSQL and messaging queues, setting up the application with Nginx reverse proxy and logging.
 
-**## Prerequisites**
+## Prerequisites
 
 * A Linux server with Ubuntu 22.04 and Python 3.12 installed.
 * SSH access to the server.
 
-**## Project Structure**
+## Project Structure
 
 The project repository should contain the following:
 
@@ -16,7 +15,7 @@ The project repository should contain the following:
 * `inventory.cfg`: An inventory file defining the target server.
 * `README.md`: This documentation file.
 
-**## Deployment Steps**
+## Deployment Steps
 
 1. **Clone the Repository:**
    - Clone the specified branch of your repository to the Linux server.
@@ -30,7 +29,7 @@ The project repository should contain the following:
      ansible-playbook main.yaml -i inventory.cfg
      ```
 
-**## Ansible Playbook (`main.yaml`)**
+## Ansible Playbook (`main.yaml`)
 
 ```yaml
 ---
@@ -192,21 +191,21 @@ The project repository should contain the following:
 
 ```
 
-**## Example `inventory.cfg`:**
+## Example `inventory.cfg`:
 
 ```ini
 [hng]
 hng ansible_host=your_server_ip
 ```
 
-**## Customize `app.env`:**
+## Customize `app.env`:
 
 ```
 SERVER_PORT=3000
 # ... other settings ...
 ```
 
-**## Notes:**
+## Notes:
 
 * Replace placeholders like `https://github.com/hngprojects/hng_boilerplate_golang_web.git` with your actual repository URL.
 * Customize the `app.env` file with your application-specific settings.
