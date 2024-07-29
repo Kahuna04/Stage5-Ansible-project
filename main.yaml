@@ -77,28 +77,29 @@
       become_user: hng
       when: not repo_exists.stat.exists
 
-    - name: Create application configuration file
+    - name: Create app.env file
       copy:
-        dest: "{{ app_dir }}/config.yaml"
+        dest: "{{ app_dir }}/app.env"
         content: |
-          database:
-            host: "127.0.0.1"
-            port: "5432"
-            username: "{{ pg_user }}"
-            password: "{{ pg_password }}"
-            name: "{{ pg_database }}"
+          SERVER_PORT=3000
+          SERVER_SECRET="mySecretKey"
+          SERVER_ACCESSTOKENEXPIREDURATION=2
+          REQUEST_PER_SECOND=6
+          TRUSTED_PROXIES=["192.168.0.1", "192.168.0.2"]
+          EXEMPT_FROM_THROTTLE=["127.0.0.1", "192.168.0.2", "::1"]
+
+          DB_HOST=localhost
+          DB_PORT=5432
+          DB_CONNECTION=pgsql
+          TIMEZONE=Africa/Lagos
+          SSLMODE=disable
+          USERNAME=postgres
+          PASSWORD=securepassword
+          DB_NAME=postgres
+          MIGRATE=false
         owner: hng
         group: hng
         mode: '0600'
-
-    - name: Set environment variables
-      lineinfile:
-        path: /etc/environment
-        line: "{{ item }}"
-        create: yes
-      loop:
-        - 'DATABASE_URL=postgres://{{ pg_user }}:{{ pg_password }}@127.0.0.1:5432/{{ pg_database }}'
-      notify: Reload Environment
 
     - name: Install application dependencies
       shell: |
