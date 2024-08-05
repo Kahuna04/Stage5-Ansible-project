@@ -128,7 +128,7 @@
 
     - name: Configure Nginx
       template:
-        src: nginx.conf.j2  # Changed to reference a Jinja2 template file
+        src: nginx.conf.j2
         dest: /etc/nginx/sites-available/default
         owner: root
         group: root
