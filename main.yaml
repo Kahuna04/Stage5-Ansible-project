@@ -63,20 +63,27 @@
           - golang
         state: present
 
-    - name: Check if repository already exists
-      stat:
-        path: "{{ app_dir }}/.git"
-      register: repo_exists
+    - name: Mark repository directory as safe
+      shell: git config --global --add safe.directory "{{ app_dir }}"
+      args:
+        executable: /bin/bash
 
-    - name: Clone the boilerplate repository
+    - name: Clone or update the repository
       git:
         repo: https://github.com/hngprojects/hng_boilerplate_golang_web.git
         dest: "{{ app_dir }}"
         version: devops
-      become: yes
-      become_user: hng
-      when: not repo_exists.stat.exists
+        update: yes
+        accept_hostkey: yes
+        force: yes
 
+    - name: Ensure app directory is owned by hng user
+      file:
+        path: "{{ app_dir }}"
+        owner: hng
+        group: hng
+        recurse: yes
+        
     - name: Create app.env file
       copy:
         dest: "{{ app_dir }}/app.env"
@@ -120,22 +127,13 @@
       become_user: hng
 
     - name: Configure Nginx
-      copy:
+      template:
+        src: nginx.conf.j2  # Changed to reference a Jinja2 template file
         dest: /etc/nginx/sites-available/default
-        content: |
-          server {
-              listen 80;
-              server_name _;
-              location / {
-                  proxy_pass http://127.0.0.1:{{ app_port }};
-                  proxy_set_header Host $host;
-                  proxy_set_header X-Real-IP $remote_addr;
-                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                  proxy_set_header X-Forwarded-Proto $scheme;
-              }
-          }
-      notify:
-        - Reload Nginx
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload Nginx
 
     - name: Ensure log files are owned by hng user
       file:
